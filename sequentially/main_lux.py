@@ -1,5 +1,5 @@
-from stable_baselines3 import PPO  # pip install stable-baselines3
-
+#from stable_baselines3 import PPO  # pip install stable-baselines3
+from Algorythm.PPO import PPO
 from lux.env.agent import AgentFromStdInOut
 from lux.env.lux_env import LuxEnvironment
 from lux.game.constants import LuxMatchConfigs_Default
