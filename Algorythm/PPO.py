@@ -12,7 +12,7 @@ from typing import Any, ClassVar, Dict, Optional, Type, TypeVar, Union
 from stable_baselines3.common.type_aliases import GymEnv, MaybeCallback, Schedule
 from stable_baselines3.common.utils import explained_variance, get_schedule_fn
 
-from Algorythm.ActorCriticPolicy import ActorCriticCnnPolicy, ActorCriticPolicy, BasePolicy, MultiInputActorCriticPolicy
+from Algorythm.ActorCriticPolicy import  ActorCriticPolicy, BasePolicy
 from Algorythm.OnPolicyAlgorithm import OnPolicyAlgorithm
 SelfPPO = TypeVar("SelfPPO", bound="PPO")
 
