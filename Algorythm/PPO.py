@@ -121,8 +121,8 @@ class PPO(OnPolicyAlgorithm):
             self.clip_range_vf = get_schedule_fn(self.clip_range_vf)
         ####################################################################
         #New with CUDA
-        self.device = "cuda" if th.cuda.is_available() else "cpu"
-        self.policy.to(self.device)
+        # self.device = "cuda" if th.cuda.is_available() else "cpu"
+        # self.policy.to(self.device)
 
     def train(self) -> None:
         """
@@ -151,10 +151,10 @@ class PPO(OnPolicyAlgorithm):
             for rollout_data in self.rollout_buffer.get(self.batch_size):
                 ####################################################################
                 # Old
-                #actions = rollout_data.actions
+                actions = rollout_data.actions
                 # New with CUDA
-                observations = rollout_data.observations.to(self.device)
-                actions = rollout_data.actions.to(self.device)
+                #observations = rollout_data.observations.to(self.device)
+                #actions = rollout_data.actions.to(self.device)
                 if isinstance(self.action_space, spaces.Discrete):
                     # Convert discrete action from float to long
                     actions = rollout_data.actions.long().flatten()
@@ -164,9 +164,9 @@ class PPO(OnPolicyAlgorithm):
                     self.policy.reset_noise(self.batch_size)
                 ####################################################################
                 # Old
-                #values, log_prob, entropy = self.policy.evaluate_actions(rollout_data.observations, actions)
+                values, log_prob, entropy = self.policy.evaluate_actions(rollout_data.observations, actions)
                 # New with CUDA
-                values, log_prob, entropy = self.policy.evaluate_actions(observations, actions)
+                #values, log_prob, entropy = self.policy.evaluate_actions(observations, actions)
                 values = values.flatten()
                 # Normalize advantage
                 ####################################################################
