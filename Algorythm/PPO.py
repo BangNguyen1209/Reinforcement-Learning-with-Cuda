@@ -1,6 +1,7 @@
 import warnings
 from typing import Any, ClassVar, Dict, Optional, Type, TypeVar, Union
 
+import numpy as np
 import torch as th
 from gymnasium import spaces
 from torch.nn import functional as F
