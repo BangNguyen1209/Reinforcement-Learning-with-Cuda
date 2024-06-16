@@ -1,3 +1,5 @@
+"""Policies: abstract base class and concrete implementations."""
+
 import collections
 import copy
 import warnings
@@ -19,18 +21,20 @@ from stable_baselines3.common.distributions import (
     StateDependentNoiseDistribution,
     make_proba_distribution,
 )
-from stable_baselines3.common.preprocessing import is_image_space, maybe_transpose, preprocess_obs
+from stable_baselines3.common.preprocessing import get_action_dim, is_image_space, maybe_transpose, preprocess_obs
 from stable_baselines3.common.torch_layers import (
     BaseFeaturesExtractor,
     CombinedExtractor,
     FlattenExtractor,
     MlpExtractor,
     NatureCNN,
+    create_mlp,
 )
 from stable_baselines3.common.type_aliases import Schedule
 from stable_baselines3.common.utils import get_device, is_vectorized_observation, obs_as_tensor
 
 SelfBaseModel = TypeVar("SelfBaseModel", bound="BaseModel")
+
 
 class BaseModel(nn.Module):
     """
@@ -111,7 +115,6 @@ class BaseModel(nn.Module):
         net_kwargs.update(dict(features_extractor=features_extractor, features_dim=features_extractor.features_dim))
         return net_kwargs
 
-    #note
     def make_features_extractor(self) -> BaseFeaturesExtractor:
         """Helper method to create a features extractor."""
         return self.features_extractor_class(self.observation_space, **self.features_extractor_kwargs)
@@ -264,7 +267,7 @@ class BaseModel(nn.Module):
 
         observation = obs_as_tensor(observation, self.device)
         return observation, vectorized_env
-    
+
 
 class BasePolicy(BaseModel, ABC):
     """The base policy object.
@@ -283,16 +286,16 @@ class BasePolicy(BaseModel, ABC):
         super().__init__(*args, **kwargs)
         self._squash_output = squash_output
 
-    # @staticmethod
-    # def _dummy_schedule(progress_remaining: float) -> float:
-    #     """(float) Useful for pickling policy."""
-    #     del progress_remaining
-    #     return 0.0
+    @staticmethod
+    def _dummy_schedule(progress_remaining: float) -> float:
+        """(float) Useful for pickling policy."""
+        del progress_remaining
+        return 0.0
 
-    # @property
-    # def squash_output(self) -> bool:
-    #     """(bool) Getter for squash_output."""
-    #     return self._squash_output
+    @property
+    def squash_output(self) -> bool:
+        """(bool) Getter for squash_output."""
+        return self._squash_output
 
     @staticmethod
     def init_weights(module: nn.Module, gain: float = 1) -> None:
@@ -382,6 +385,7 @@ class BasePolicy(BaseModel, ABC):
         """
         low, high = self.action_space.low, self.action_space.high
         return low + (0.5 * (scaled_action + 1.0) * (high - low))
+
 
 class ActorCriticPolicy(BasePolicy):
     """
@@ -526,14 +530,14 @@ class ActorCriticPolicy(BasePolicy):
         )
         return data
 
-    # def reset_noise(self, n_envs: int = 1) -> None:
-    #     """
-    #     Sample new weights for the exploration matrix.
+    def reset_noise(self, n_envs: int = 1) -> None:
+        """
+        Sample new weights for the exploration matrix.
 
-    #     :param n_envs:
-    #     """
-    #     assert isinstance(self.action_dist, StateDependentNoiseDistribution), "reset_noise() is only available when using gSDE"
-    #     self.action_dist.sample_weights(self.log_std, batch_size=n_envs)
+        :param n_envs:
+        """
+        assert isinstance(self.action_dist, StateDependentNoiseDistribution), "reset_noise() is only available when using gSDE"
+        self.action_dist.sample_weights(self.log_std, batch_size=n_envs)
 
     def _build_mlp_extractor(self) -> None:
         """
@@ -557,9 +561,6 @@ class ActorCriticPolicy(BasePolicy):
         :param lr_schedule: Learning rate schedule
             lr_schedule(1) is the initial learning rate
         """
-        
-        #self._build_mlp_extractor()
-        #CUDA
         self._build_mlp_extractor()
 
         latent_dim_pi = self.mlp_extractor.latent_dim_pi
@@ -576,11 +577,8 @@ class ActorCriticPolicy(BasePolicy):
             self.action_net = self.action_dist.proba_distribution_net(latent_dim=latent_dim_pi)
         else:
             raise NotImplementedError(f"Unsupported distribution '{self.action_dist}'.")
-        
-        #self.value_net = nn.Linear(self.mlp_extractor.latent_dim_vf, 1)
-        #CUDA 
-        self.value_net = nn.Linear(self.mlp_extractor.latent_dim_vf, 1).to(self.device)
 
+        self.value_net = nn.Linear(self.mlp_extractor.latent_dim_vf, 1)
         # Init weights: use orthogonal initialization
         # with small initial weight for the output
         if self.ortho_init:
@@ -605,8 +603,6 @@ class ActorCriticPolicy(BasePolicy):
                 module.apply(partial(self.init_weights, gain=gain))
 
         # Setup optimizer with initial learning rate
-        #self.optimizer = self.optimizer_class(self.parameters(), lr=lr_schedule(1), **self.optimizer_kwargs)
-        #CUDA
         self.optimizer = self.optimizer_class(self.parameters(), lr=lr_schedule(1), **self.optimizer_kwargs)
 
     def forward(self, obs: th.Tensor, deterministic: bool = False) -> Tuple[th.Tensor, th.Tensor, th.Tensor]:
@@ -618,8 +614,7 @@ class ActorCriticPolicy(BasePolicy):
         :return: action, value and log probability of the action
         """
         # Preprocess the observation if needed
-        #CUDA
-        features = self.extract_features(obs).to(self.device)
+        features = self.extract_features(obs)
         if self.share_features_extractor:
             latent_pi, latent_vf = self.mlp_extractor(features)
         else:
@@ -627,12 +622,11 @@ class ActorCriticPolicy(BasePolicy):
             latent_pi = self.mlp_extractor.forward_actor(pi_features)
             latent_vf = self.mlp_extractor.forward_critic(vf_features)
         # Evaluate the values for the given observations
-        #CUDA
-        values = self.value_net(latent_vf).to(self.device)
+        values = self.value_net(latent_vf)
         distribution = self._get_action_dist_from_latent(latent_pi)
-        actions = distribution.get_actions(deterministic=deterministic).to(self.device)
-        log_prob = distribution.log_prob(actions).to(self.device)
-        actions = actions.reshape((-1, *self.action_space.shape)).to(self.device)
+        actions = distribution.get_actions(deterministic=deterministic)
+        log_prob = distribution.log_prob(actions)
+        actions = actions.reshape((-1, *self.action_space.shape))
         return actions, values, log_prob
 
     def extract_features(self, obs: th.Tensor) -> Union[th.Tensor, Tuple[th.Tensor, th.Tensor]]:
@@ -656,8 +650,7 @@ class ActorCriticPolicy(BasePolicy):
         :param latent_pi: Latent code for the actor
         :return: Action distribution
         """
-        #CUDA
-        mean_actions = self.action_net(latent_pi).to(self.device)
+        mean_actions = self.action_net(latent_pi)
 
         if isinstance(self.action_dist, DiagGaussianDistribution):
             return self.action_dist.proba_distribution(mean_actions, self.log_std)
@@ -730,3 +723,225 @@ class ActorCriticPolicy(BasePolicy):
         features = super().extract_features(obs, self.vf_features_extractor)
         latent_vf = self.mlp_extractor.forward_critic(features)
         return self.value_net(latent_vf)
+
+
+class ActorCriticCnnPolicy(ActorCriticPolicy):
+    """
+    CNN policy class for actor-critic algorithms (has both policy and value prediction).
+    Used by A2C, PPO and the likes.
+
+    :param observation_space: Observation space
+    :param action_space: Action space
+    :param lr_schedule: Learning rate schedule (could be constant)
+    :param net_arch: The specification of the policy and value networks.
+    :param activation_fn: Activation function
+    :param ortho_init: Whether to use or not orthogonal initialization
+    :param use_sde: Whether to use State Dependent Exploration or not
+    :param log_std_init: Initial value for the log standard deviation
+    :param full_std: Whether to use (n_features x n_actions) parameters
+        for the std instead of only (n_features,) when using gSDE
+    :param use_expln: Use ``expln()`` function instead of ``exp()`` to ensure
+        a positive standard deviation (cf paper). It allows to keep variance
+        above zero and prevent it from growing too fast. In practice, ``exp()`` is usually enough.
+    :param squash_output: Whether to squash the output using a tanh function,
+        this allows to ensure boundaries when using gSDE.
+    :param features_extractor_class: Features extractor to use.
+    :param features_extractor_kwargs: Keyword arguments
+        to pass to the features extractor.
+    :param share_features_extractor: If True, the features extractor is shared between the policy and value networks.
+    :param normalize_images: Whether to normalize images or not,
+         dividing by 255.0 (True by default)
+    :param optimizer_class: The optimizer to use,
+        ``th.optim.Adam`` by default
+    :param optimizer_kwargs: Additional keyword arguments,
+        excluding the learning rate, to pass to the optimizer
+    """
+
+    def __init__(
+        self,
+        observation_space: spaces.Space,
+        action_space: spaces.Space,
+        lr_schedule: Schedule,
+        net_arch: Optional[Union[List[int], Dict[str, List[int]]]] = None,
+        activation_fn: Type[nn.Module] = nn.Tanh,
+        ortho_init: bool = True,
+        use_sde: bool = False,
+        log_std_init: float = 0.0,
+        full_std: bool = True,
+        use_expln: bool = False,
+        squash_output: bool = False,
+        features_extractor_class: Type[BaseFeaturesExtractor] = NatureCNN,
+        features_extractor_kwargs: Optional[Dict[str, Any]] = None,
+        share_features_extractor: bool = True,
+        normalize_images: bool = True,
+        optimizer_class: Type[th.optim.Optimizer] = th.optim.Adam,
+        optimizer_kwargs: Optional[Dict[str, Any]] = None,
+    ):
+        super().__init__(
+            observation_space,
+            action_space,
+            lr_schedule,
+            net_arch,
+            activation_fn,
+            ortho_init,
+            use_sde,
+            log_std_init,
+            full_std,
+            use_expln,
+            squash_output,
+            features_extractor_class,
+            features_extractor_kwargs,
+            share_features_extractor,
+            normalize_images,
+            optimizer_class,
+            optimizer_kwargs,
+        )
+
+
+class MultiInputActorCriticPolicy(ActorCriticPolicy):
+    """
+    MultiInputActorClass policy class for actor-critic algorithms (has both policy and value prediction).
+    Used by A2C, PPO and the likes.
+
+    :param observation_space: Observation space (Tuple)
+    :param action_space: Action space
+    :param lr_schedule: Learning rate schedule (could be constant)
+    :param net_arch: The specification of the policy and value networks.
+    :param activation_fn: Activation function
+    :param ortho_init: Whether to use or not orthogonal initialization
+    :param use_sde: Whether to use State Dependent Exploration or not
+    :param log_std_init: Initial value for the log standard deviation
+    :param full_std: Whether to use (n_features x n_actions) parameters
+        for the std instead of only (n_features,) when using gSDE
+    :param use_expln: Use ``expln()`` function instead of ``exp()`` to ensure
+        a positive standard deviation (cf paper). It allows to keep variance
+        above zero and prevent it from growing too fast. In practice, ``exp()`` is usually enough.
+    :param squash_output: Whether to squash the output using a tanh function,
+        this allows to ensure boundaries when using gSDE.
+    :param features_extractor_class: Uses the CombinedExtractor
+    :param features_extractor_kwargs: Keyword arguments
+        to pass to the features extractor.
+    :param share_features_extractor: If True, the features extractor is shared between the policy and value networks.
+    :param normalize_images: Whether to normalize images or not,
+         dividing by 255.0 (True by default)
+    :param optimizer_class: The optimizer to use,
+        ``th.optim.Adam`` by default
+    :param optimizer_kwargs: Additional keyword arguments,
+        excluding the learning rate, to pass to the optimizer
+    """
+
+    def __init__(
+        self,
+        observation_space: spaces.Dict,
+        action_space: spaces.Space,
+        lr_schedule: Schedule,
+        net_arch: Optional[Union[List[int], Dict[str, List[int]]]] = None,
+        activation_fn: Type[nn.Module] = nn.Tanh,
+        ortho_init: bool = True,
+        use_sde: bool = False,
+        log_std_init: float = 0.0,
+        full_std: bool = True,
+        use_expln: bool = False,
+        squash_output: bool = False,
+        features_extractor_class: Type[BaseFeaturesExtractor] = CombinedExtractor,
+        features_extractor_kwargs: Optional[Dict[str, Any]] = None,
+        share_features_extractor: bool = True,
+        normalize_images: bool = True,
+        optimizer_class: Type[th.optim.Optimizer] = th.optim.Adam,
+        optimizer_kwargs: Optional[Dict[str, Any]] = None,
+    ):
+        super().__init__(
+            observation_space,
+            action_space,
+            lr_schedule,
+            net_arch,
+            activation_fn,
+            ortho_init,
+            use_sde,
+            log_std_init,
+            full_std,
+            use_expln,
+            squash_output,
+            features_extractor_class,
+            features_extractor_kwargs,
+            share_features_extractor,
+            normalize_images,
+            optimizer_class,
+            optimizer_kwargs,
+        )
+
+
+class ContinuousCritic(BaseModel):
+    """
+    Critic network(s) for DDPG/SAC/TD3.
+    It represents the action-state value function (Q-value function).
+    Compared to A2C/PPO critics, this one represents the Q-value
+    and takes the continuous action as input. It is concatenated with the state
+    and then fed to the network which outputs a single value: Q(s, a).
+    For more recent algorithms like SAC/TD3, multiple networks
+    are created to give different estimates.
+
+    By default, it creates two critic networks used to reduce overestimation
+    thanks to clipped Q-learning (cf TD3 paper).
+
+    :param observation_space: Obervation space
+    :param action_space: Action space
+    :param net_arch: Network architecture
+    :param features_extractor: Network to extract features
+        (a CNN when using images, a nn.Flatten() layer otherwise)
+    :param features_dim: Number of features
+    :param activation_fn: Activation function
+    :param normalize_images: Whether to normalize images or not,
+         dividing by 255.0 (True by default)
+    :param n_critics: Number of critic networks to create.
+    :param share_features_extractor: Whether the features extractor is shared or not
+        between the actor and the critic (this saves computation time)
+    """
+
+    def __init__(
+        self,
+        observation_space: spaces.Space,
+        action_space: spaces.Box,
+        net_arch: List[int],
+        features_extractor: BaseFeaturesExtractor,
+        features_dim: int,
+        activation_fn: Type[nn.Module] = nn.ReLU,
+        normalize_images: bool = True,
+        n_critics: int = 2,
+        share_features_extractor: bool = True,
+    ):
+        super().__init__(
+            observation_space,
+            action_space,
+            features_extractor=features_extractor,
+            normalize_images=normalize_images,
+        )
+
+        action_dim = get_action_dim(self.action_space)
+
+        self.share_features_extractor = share_features_extractor
+        self.n_critics = n_critics
+        self.q_networks = []
+        for idx in range(n_critics):
+            q_net = create_mlp(features_dim + action_dim, 1, net_arch, activation_fn)
+            q_net = nn.Sequential(*q_net)
+            self.add_module(f"qf{idx}", q_net)
+            self.q_networks.append(q_net)
+
+    def forward(self, obs: th.Tensor, actions: th.Tensor) -> Tuple[th.Tensor, ...]:
+        # Learn the features extractor using the policy loss only
+        # when the features_extractor is shared with the actor
+        with th.set_grad_enabled(not self.share_features_extractor):
+            features = self.extract_features(obs, self.features_extractor)
+        qvalue_input = th.cat([features, actions], dim=1)
+        return tuple(q_net(qvalue_input) for q_net in self.q_networks)
+
+    def q1_forward(self, obs: th.Tensor, actions: th.Tensor) -> th.Tensor:
+        """
+        Only predict the Q-value using the first network.
+        This allows to reduce computation when all the estimates are not needed
+        (e.g. when updating the policy in TD3).
+        """
+        with th.no_grad():
+            features = self.extract_features(obs, self.features_extractor)
+        return self.q_networks[0](th.cat([features, actions], dim=1))
