@@ -179,21 +179,21 @@ class BaseModel(nn.Module):
         model.to(device)
         return model
 
-    # def load_from_vector(self, vector: np.ndarray) -> None:
-    #     """
-    #     Load parameters from a 1D vector.
+    def load_from_vector(self, vector: np.ndarray) -> None:
+        """
+        Load parameters from a 1D vector.
 
-    #     :param vector:
-    #     """
-    #     th.nn.utils.vector_to_parameters(th.as_tensor(vector, dtype=th.float, device=self.device), self.parameters())
+        :param vector:
+        """
+        th.nn.utils.vector_to_parameters(th.as_tensor(vector, dtype=th.float, device=self.device), self.parameters())
 
-    # def parameters_to_vector(self) -> np.ndarray:
-    #     """
-    #     Convert the parameters to a 1D vector.
+    def parameters_to_vector(self) -> np.ndarray:
+        """
+        Convert the parameters to a 1D vector.
 
-    #     :return:
-    #     """
-    #     return th.nn.utils.parameters_to_vector(self.parameters()).detach().cpu().numpy()
+        :return:
+        """
+        return th.nn.utils.parameters_to_vector(self.parameters()).detach().cpu().numpy()
 
     def set_training_mode(self, mode: bool) -> None:
         """
@@ -205,65 +205,65 @@ class BaseModel(nn.Module):
         """
         self.train(mode)
 
-    # def is_vectorized_observation(self, observation: Union[np.ndarray, Dict[str, np.ndarray]]) -> bool:
-    #     """
-    #     Check whether or not the observation is vectorized,
-    #     apply transposition to image (so that they are channel-first) if needed.
-    #     This is used in DQN when sampling random action (epsilon-greedy policy)
+    def is_vectorized_observation(self, observation: Union[np.ndarray, Dict[str, np.ndarray]]) -> bool:
+        """
+        Check whether or not the observation is vectorized,
+        apply transposition to image (so that they are channel-first) if needed.
+        This is used in DQN when sampling random action (epsilon-greedy policy)
 
-    #     :param observation: the input observation to check
-    #     :return: whether the given observation is vectorized or not
-    #     """
-    #     vectorized_env = False
-    #     if isinstance(observation, dict):
-    #         for key, obs in observation.items():
-    #             obs_space = self.observation_space.spaces[key]
-    #             vectorized_env = vectorized_env or is_vectorized_observation(maybe_transpose(obs, obs_space), obs_space)
-    #     else:
-    #         vectorized_env = is_vectorized_observation(
-    #             maybe_transpose(observation, self.observation_space), self.observation_space
-    #         )
-    #     return vectorized_env
+        :param observation: the input observation to check
+        :return: whether the given observation is vectorized or not
+        """
+        vectorized_env = False
+        if isinstance(observation, dict):
+            for key, obs in observation.items():
+                obs_space = self.observation_space.spaces[key]
+                vectorized_env = vectorized_env or is_vectorized_observation(maybe_transpose(obs, obs_space), obs_space)
+        else:
+            vectorized_env = is_vectorized_observation(
+                maybe_transpose(observation, self.observation_space), self.observation_space
+            )
+        return vectorized_env
 
-    # def obs_to_tensor(self, observation: Union[np.ndarray, Dict[str, np.ndarray]]) -> Tuple[th.Tensor, bool]:
-    #     """
-    #     Convert an input observation to a PyTorch tensor that can be fed to a model.
-    #     Includes sugar-coating to handle different observations (e.g. normalizing images).
+    def obs_to_tensor(self, observation: Union[np.ndarray, Dict[str, np.ndarray]]) -> Tuple[th.Tensor, bool]:
+        """
+        Convert an input observation to a PyTorch tensor that can be fed to a model.
+        Includes sugar-coating to handle different observations (e.g. normalizing images).
 
-    #     :param observation: the input observation
-    #     :return: The observation as PyTorch tensor
-    #         and whether the observation is vectorized or not
-    #     """
-    #     vectorized_env = False
-    #     if isinstance(observation, dict):
-    #         # need to copy the dict as the dict in VecFrameStack will become a torch tensor
-    #         observation = copy.deepcopy(observation)
-    #         for key, obs in observation.items():
-    #             obs_space = self.observation_space.spaces[key]
-    #             if is_image_space(obs_space):
-    #                 obs_ = maybe_transpose(obs, obs_space)
-    #             else:
-    #                 obs_ = np.array(obs)
-    #             vectorized_env = vectorized_env or is_vectorized_observation(obs_, obs_space)
-    #             # Add batch dimension if needed
-    #             observation[key] = obs_.reshape((-1, *self.observation_space[key].shape))
+        :param observation: the input observation
+        :return: The observation as PyTorch tensor
+            and whether the observation is vectorized or not
+        """
+        vectorized_env = False
+        if isinstance(observation, dict):
+            # need to copy the dict as the dict in VecFrameStack will become a torch tensor
+            observation = copy.deepcopy(observation)
+            for key, obs in observation.items():
+                obs_space = self.observation_space.spaces[key]
+                if is_image_space(obs_space):
+                    obs_ = maybe_transpose(obs, obs_space)
+                else:
+                    obs_ = np.array(obs)
+                vectorized_env = vectorized_env or is_vectorized_observation(obs_, obs_space)
+                # Add batch dimension if needed
+                observation[key] = obs_.reshape((-1, *self.observation_space[key].shape))
 
-    #     elif is_image_space(self.observation_space):
-    #         # Handle the different cases for images
-    #         # as PyTorch use channel first format
-    #         observation = maybe_transpose(observation, self.observation_space)
+        elif is_image_space(self.observation_space):
+            # Handle the different cases for images
+            # as PyTorch use channel first format
+            observation = maybe_transpose(observation, self.observation_space)
 
-    #     else:
-    #         observation = np.array(observation)
+        else:
+            observation = np.array(observation)
 
-    #     if not isinstance(observation, dict):
-    #         # Dict obs need to be handled separately
-    #         vectorized_env = is_vectorized_observation(observation, self.observation_space)
-    #         # Add batch dimension if needed
-    #         observation = observation.reshape((-1, *self.observation_space.shape))
+        if not isinstance(observation, dict):
+            # Dict obs need to be handled separately
+            vectorized_env = is_vectorized_observation(observation, self.observation_space)
+            # Add batch dimension if needed
+            observation = observation.reshape((-1, *self.observation_space.shape))
 
-    #     observation = obs_as_tensor(observation, self.device)
-    #     return observation, vectorized_env
+        observation = obs_as_tensor(observation, self.device)
+        return observation, vectorized_env
     
 
 class BasePolicy(BaseModel, ABC):
