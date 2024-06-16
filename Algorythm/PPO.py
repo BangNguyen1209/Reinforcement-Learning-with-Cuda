@@ -7,13 +7,13 @@ from gymnasium import spaces
 from torch.nn import functional as F
 from typing import Any, ClassVar, Dict, Optional, Type, TypeVar, Union
 
-#from stable_baselines3.common.on_policy_algorithm import OnPolicyAlgorithm
+from stable_baselines3.common.on_policy_algorithm import OnPolicyAlgorithm
 #from stable_baselines3.common.policies import ActorCriticCnnPolicy, ActorCriticPolicy, BasePolicy, MultiInputActorCriticPolicy
 from stable_baselines3.common.type_aliases import GymEnv, MaybeCallback, Schedule
 from stable_baselines3.common.utils import explained_variance, get_schedule_fn
 
 from Algorythm.ActorCriticPolicy import ActorCriticCnnPolicy, ActorCriticPolicy, BasePolicy
-from Algorythm.OnPolicyAlgorithm import OnPolicyAlgorithm
+#from Algorythm.OnPolicyAlgorithm import OnPolicyAlgorithm
 SelfPPO = TypeVar("SelfPPO", bound="PPO")
 
 
