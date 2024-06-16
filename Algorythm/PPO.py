@@ -7,13 +7,13 @@ from gymnasium import spaces
 from torch.nn import functional as F
 from typing import Any, ClassVar, Dict, Optional, Type, TypeVar, Union
 
-#from stable_baselines3.common.on_policy_algorithm import OnPolicyAlgorithm
-#from stable_baselines3.common.policies import ActorCriticPolicy, BasePolicy
+from stable_baselines3.common.on_policy_algorithm import OnPolicyAlgorithm
+from stable_baselines3.common.policies import ActorCriticCnnPolicy, ActorCriticPolicy, BasePolicy, MultiInputActorCriticPolicy
 from stable_baselines3.common.type_aliases import GymEnv, MaybeCallback, Schedule
 from stable_baselines3.common.utils import explained_variance, get_schedule_fn
 
-from Algorythm.ActorCriticPolicy import ActorCriticPolicy, BasePolicy
-from Algorythm.OnPolicyAlgorithm import OnPolicyAlgorithm
+#from Algorythm.ActorCriticPolicy import ActorCriticCnnPolicy, ActorCriticPolicy, BasePolicy, MultiInputActorCriticPolicy
+#from Algorythm.OnPolicyAlgorithm import OnPolicyAlgorithm
 SelfPPO = TypeVar("SelfPPO", bound="PPO")
 
 
@@ -21,6 +21,8 @@ class PPO(OnPolicyAlgorithm):
     
     policy_aliases: ClassVar[Dict[str, Type[BasePolicy]]] = {
         "MlpPolicy": ActorCriticPolicy,
+        #"CnnPolicy": ActorCriticCnnPolicy,
+        #"MultiInputPolicy": MultiInputActorCriticPolicy,
     }
 
     def __init__(
@@ -238,23 +240,23 @@ class PPO(OnPolicyAlgorithm):
             self._n_updates += 1
             if not continue_training:
                 break
-        explained_var = explained_variance(self.rollout_buffer.values.flatten(), self.rollout_buffer.returns.flatten())
+        # explained_var = explained_variance(self.rollout_buffer.values.flatten(), self.rollout_buffer.returns.flatten())
 
-        # Logs
-        self.logger.record("train/entropy_loss", np.mean(entropy_losses))
-        self.logger.record("train/policy_gradient_loss", np.mean(pg_losses))
-        self.logger.record("train/value_loss", np.mean(value_losses))
-        self.logger.record("train/approx_kl", np.mean(approx_kl_divs))
-        self.logger.record("train/clip_fraction", np.mean(clip_fractions))
-        self.logger.record("train/loss", loss.item())
-        self.logger.record("train/explained_variance", explained_var)
-        if hasattr(self.policy, "log_std"):
-            self.logger.record("train/std", th.exp(self.policy.log_std).mean().item())
+        # # Logs
+        # self.logger.record("train/entropy_loss", np.mean(entropy_losses))
+        # self.logger.record("train/policy_gradient_loss", np.mean(pg_losses))
+        # self.logger.record("train/value_loss", np.mean(value_losses))
+        # self.logger.record("train/approx_kl", np.mean(approx_kl_divs))
+        # self.logger.record("train/clip_fraction", np.mean(clip_fractions))
+        # self.logger.record("train/loss", loss.item())
+        # self.logger.record("train/explained_variance", explained_var)
+        # if hasattr(self.policy, "log_std"):
+        #     self.logger.record("train/std", th.exp(self.policy.log_std).mean().item())
 
-        self.logger.record("train/n_updates", self._n_updates, exclude="tensorboard")
-        self.logger.record("train/clip_range", clip_range)
-        if self.clip_range_vf is not None:
-            self.logger.record("train/clip_range_vf", clip_range_vf)
+        # self.logger.record("train/n_updates", self._n_updates, exclude="tensorboard")
+        # self.logger.record("train/clip_range", clip_range)
+        # if self.clip_range_vf is not None:
+        #     self.logger.record("train/clip_range_vf", clip_range_vf)
 
     def learn(
         self: SelfPPO,
