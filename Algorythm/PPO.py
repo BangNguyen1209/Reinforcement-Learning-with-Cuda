@@ -21,8 +21,8 @@ class PPO(OnPolicyAlgorithm):
     
     policy_aliases: ClassVar[Dict[str, Type[BasePolicy]]] = {
         "MlpPolicy": ActorCriticPolicy,
-        #"CnnPolicy": ActorCriticCnnPolicy,
-        #"MultiInputPolicy": MultiInputActorCriticPolicy,
+        "CnnPolicy": ActorCriticCnnPolicy,
+        "MultiInputPolicy": MultiInputActorCriticPolicy,
     }
 
     def __init__(
